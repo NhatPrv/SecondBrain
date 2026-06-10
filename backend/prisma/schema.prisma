@@ -1,0 +1,272 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id            String               @id @default(uuid())
+  email         String               @unique
+  passwordHash  String
+  name          String
+  initials      String
+  color         String
+  online        Boolean              @default(false)
+  storageLimit  Float                @default(107374182400) // 100GB in bytes
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+  memberships   ConversationMember[]
+  messages      Message[]
+  reactions     Reaction[]
+  driveItems    DriveItem[]
+  notes         Note[]
+  playerProfile PlayerProfile?
+  farm          Farm?
+  inventory     InventoryItem[]
+  listings      MarketplaceListing[]
+  quests        Quest[]
+  achievements  Achievement[]
+  friendships   Friendship[]         @relation("UserFriends")
+  friendOf      Friendship[]         @relation("FriendUsers")
+}
+
+model Conversation {
+  id        String               @id @default(uuid())
+  name      String
+  type      String               // "direct" | "group"
+  color     String
+  initials  String
+  pinned    Boolean              @default(false)
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+  members   ConversationMember[]
+  messages  Message[]
+}
+
+model ConversationMember {
+  id             String       @id @default(uuid())
+  conversationId String
+  userId         String
+  joinedAt       DateTime     @default(now())
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+}
+
+model Message {
+  id             String       @id @default(uuid())
+  conversationId String
+  authorId       String
+  text           String
+  pinned         Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  replyToId      String?
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  author         User         @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  replyTo        Message?     @relation("ReplyToMessage", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies        Message[]    @relation("ReplyToMessage")
+  reactions      Reaction[]
+}
+
+model Reaction {
+  id        String   @id @default(uuid())
+  messageId String
+  userId    String
+  emoji     String
+  createdAt DateTime @default(now())
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId, emoji])
+}
+
+model DriveItem {
+  id            String      @id @default(uuid())
+  name          String
+  kind          String      // "folder" | "image" | "pdf" | "doc" | "sheet" | "video" | "audio" | "file"
+  size          String?
+  sizeBytes     Float?      @default(0) // Exact file size in bytes
+  modified      String      // Human readable modified, e.g. "May 2" or "Just now"
+  starred       Boolean     @default(false)
+  googleDriveId String?     // The actual ID in Google Drive
+  parentId      String?
+  userId        String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  parent        DriveItem?  @relation("FolderContents", fields: [parentId], references: [id], onDelete: Cascade)
+  children      DriveItem[] @relation("FolderContents")
+  user          User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+}
+
+model Note {
+  id        String   @id @default(uuid())
+  title     String
+  body      String
+  category  String
+  tags      String[]
+  pinned    Boolean  @default(false)
+  color     String
+  userId    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model PlayerProfile {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  title     String   @default("Sprout Tender")
+  level     Int      @default(1)
+  xp        Int      @default(0)
+  xpToNext  Int      @default(100)
+  gold      Int      @default(1000)
+  gems      Int      @default(10)
+  energy    Int      @default(100)
+  maxEnergy Int      @default(100)
+  streak    Int      @default(0)
+  lastLogin DateTime @default(now())
+  avatar    String   @default("🦊")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Farm {
+  id        String          @id @default(uuid())
+  userId    String          @unique
+  name      String          @default("My Farm")
+  level     Int             @default(1)
+  plots     FarmPlot[]
+  animals   AnimalInstance[]
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Crop {
+  id                String     @id @default(uuid())
+  name              String     @unique
+  emoji             String
+  category          String     @default("Crops")
+  rarity            String     @default("common")
+  growthTimeSeconds Int        @default(30)
+  buyPrice          Int        @default(10)
+  sellPrice         Int        @default(15)
+  xpReward          Int        @default(5)
+  plots             FarmPlot[]
+}
+
+model FarmPlot {
+  id            String    @id @default(uuid())
+  farmId        String
+  index         Int
+  state         String    @default("empty") // "empty" | "seeded" | "growing" | "ready"
+  cropId        String?
+  plantedAt     DateTime?
+  lastWateredAt DateTime?
+  watered       Boolean   @default(false)
+  farm          Farm      @relation(fields: [farmId], references: [id], onDelete: Cascade)
+  crop          Crop?     @relation(fields: [cropId], references: [id], onDelete: SetNull)
+
+  @@unique([farmId, index])
+}
+
+model Animal {
+  id                    String           @id @default(uuid())
+  name                  String           @unique
+  species               String
+  emoji                 String
+  produces              String
+  productionTimeSeconds Int              @default(60)
+  buyPrice              Int              @default(50)
+  feedCost              Int              @default(5)
+  instances             AnimalInstance[]
+}
+
+model AnimalInstance {
+  id        String    @id @default(uuid())
+  farmId    String
+  animalId  String
+  name      String
+  happy     Int       @default(100)
+  fed       Boolean   @default(false)
+  fedAt     DateTime?
+  readyAt   DateTime?
+  farm      Farm      @relation(fields: [farmId], references: [id], onDelete: Cascade)
+  animal    Animal    @relation(fields: [animalId], references: [id], onDelete: Cascade)
+}
+
+model Fish {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  emoji     String
+  rarity    String   @default("common")
+  baseValue Int      @default(20)
+  unlocked  Boolean  @default(true)
+}
+
+model InventoryItem {
+  id       String @id @default(uuid())
+  userId   String
+  name     String
+  emoji    String
+  qty      Int    @default(1)
+  category String // "Crops" | "Produce" | "Fish" | "Materials" | "Tools" | "Decor" | "Seeds"
+  rarity   String @default("common")
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, name])
+}
+
+model MarketplaceListing {
+  id           String   @id @default(uuid())
+  sellerId     String
+  itemName     String
+  itemEmoji    String
+  itemCategory String
+  itemRarity   String
+  price        Int
+  qty          Int
+  status       String   @default("active") // "active" | "sold" | "cancelled"
+  createdAt    DateTime @default(now())
+  seller       User     @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+}
+
+model Quest {
+  id        String   @id @default(uuid())
+  userId    String
+  title     String
+  progress  Int      @default(0)
+  goal      Int      @default(1)
+  reward    Int      @default(10)
+  type      String   @default("gold") // "gold" | "xp" | "gem"
+  done      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Achievement {
+  id        String   @id @default(uuid())
+  userId    String
+  name      String
+  desc      String
+  emoji     String
+  progress  Int      @default(0)
+  goal      Int      @default(1)
+  done      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Friendship {
+  id        String   @id @default(uuid())
+  userId    String
+  friendId  String
+  status    String   @default("accepted") // "pending" | "accepted"
+  createdAt DateTime @default(now())
+  user      User     @relation("UserFriends", fields: [userId], references: [id], onDelete: Cascade)
+  friend    User     @relation("FriendUsers", fields: [friendId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, friendId])
+}
