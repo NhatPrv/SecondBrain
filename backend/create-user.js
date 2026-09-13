@@ -5,7 +5,7 @@ const prisma = new PrismaClient();
 
 async function main() {
   const email = 'torikun2005@gmail.com';
-  const password = '@37Nholldapigg';
+  const password = '123456';
   const name = 'Torik';
   const initials = 'T';
   const color = 'bg-chart-1';
